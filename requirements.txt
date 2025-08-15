@@ -1,0 +1,7 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+git+https://github.com/vlad29042/graphiti.git@main
+pydantic-settings>=2.4.0
+python-dotenv
+httpx
+neo4j
