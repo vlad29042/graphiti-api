@@ -2,6 +2,12 @@
 
 Production-ready HTTP API обёртка для [Graphiti](https://github.com/getzep/graphiti) - фреймворка для построения временных графов знаний для AI агентов.
 
+## Автор
+
+- **Telegram канал**: [FlowHubN8N](https://t.me/FlowHubN8N) - проекты и архитектуры на базе n8n
+- **Специализация**: Production системы с микросервисной архитектурой, интеграция AI в бизнес-процессы
+- **Применение Graphiti**: Замена векторных БД, динамическая альтернатива статическим промптам, основа для систем самообучения
+
 ## Зачем эта обёртка?
 
 Graphiti мощный инструмент, но имеет конфликты event loop при прямой интеграции с асинхронными системами. Эта FastAPI обёртка решает проблему через:
@@ -9,6 +15,7 @@ Graphiti мощный инструмент, но имеет конфликты e
 - Предоставление RESTful HTTP endpoints для универсального доступа
 - Добавление n8n-совместимых endpoints для автоматизации
 - Включение health checks и мониторинга
+
 
 ## Возможности
 
@@ -19,6 +26,25 @@ Graphiti мощный инструмент, но имеет конфликты e
 - ✅ **Docker Ready** - Production развёртывание через docker-compose
 - ✅ **OpenAPI документация** - Автогенерируемая документация API на `/docs`
 - ✅ **Оценка релевантности** - Фильтрация результатов по score (требует форк Graphiti)
+
+## Зачем Graphiti вместо векторной БД?
+
+В отличие от традиционных векторных БД, Graphiti предоставляет:
+- **Временную осведомлённость** - понимание когда факты стали истинными/ложными
+- **Связи между сущностями** - граф вместо изолированных векторов
+- **Динамическое обновление** - факты могут устаревать и обновляться
+- **Контекстное понимание** - связи важнее отдельных фактов
+
+### Примеры применения:
+
+```python
+# Традиционная векторная БД
+vector_db.add(text="Компания основана в 2008", embedding=[...])
+
+# Graphiti - понимает контекст и время
+await graphiti.add_episode("Компания ДонКровляСтрой основана в 2008 году в Донецке. С 2022 года офис в Ростове.")
+# Автоматически: создаст сущности, связи, временные метки, понимает что офис переехал
+```
 
 ## Быстрый старт
 
@@ -32,7 +58,7 @@ Graphiti мощный инструмент, но имеет конфликты e
 
 1. Клонируйте репозиторий:
 ```bash
-git clone https://github.com/yourusername/graphiti-api.git
+git clone https://github.com/vlad29042/graphiti-api.git
 cd graphiti-api
 ```
 
@@ -126,6 +152,80 @@ POST /get-memory
 GET /health
 ```
 
+## Интеграция с n8n
+
+### Пример workflow для добавления знаний
+
+```json
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-knowledge",
+        "responseMode": "onReceived"
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://graphiti-api:8000/messages",
+        "bodyParametersJson": {
+          "group_id": "{{ $json.group_id }}",
+          "messages": "{{ $json.messages }}"
+        }
+      },
+      "name": "Add to Graphiti",
+      "type": "n8n-nodes-base.httpRequest"
+    }
+  ]
+}
+```
+
+### Пример workflow для AI с контекстом
+
+```json
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://graphiti-api:8000/get-memory",
+        "bodyParametersJson": {
+          "group_id": "{{ $json.group_id }}",
+          "messages": [{"role": "user", "content": "{{ $json.query }}"}],
+          "max_facts": 10,
+          "min_score": 0.7
+        }
+      },
+      "name": "Get Context",
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Используй следующие факты: {{ $json.facts }}"
+            },
+            {
+              "role": "user", 
+              "content": "{{ $json.query }}"
+            }
+          ]
+        }
+      },
+      "name": "OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi"
+    }
+  ]
+}
+```
+
 ## Архитектура
 
 ```
@@ -157,7 +257,7 @@ GET /health
 
 1. Обновите `requirements.txt`:
 ```
-git+https://github.com/yourusername/graphiti.git@main
+git+https://github.com/vlad29042/graphiti.git@main
 ```
 
 2. Обновите Dockerfile для установки git:
@@ -201,6 +301,34 @@ graphiti-api/
 ├── .env.example         # Шаблон окружения
 └── README.md            # Этот файл
 ```
+
+## Production советы
+
+### 1. Группировка знаний
+
+Используйте разные `group_id` для разделения контекстов:
+- `company_knowledge` - знания о компании
+- `product_catalog` - каталог продукции  
+- `customer_interactions` - история взаимодействий
+- `technical_docs` - техническая документация
+
+### 2. Временная валидность
+
+Указывайте время валидности фактов:
+```python
+# Цены действительны с определённой даты
+"Монтаж металлочерепицы стоит 450 руб/м² с 01.01.2024"
+```
+
+### 3. Мониторинг
+
+- Отслеживайте размер графа
+- Мониторьте время ответа
+- Логируйте relevance_score для оптимизации
+
+### 4. Очистка устаревших данных
+
+Периодически помечайте устаревшие факты как invalid_at.
 
 ## Развёртывание
 
@@ -255,4 +383,4 @@ Graphiti лицензирован под Apache 2.0 License.
 ## Благодарности
 
 - Основано на [Graphiti](https://github.com/getzep/graphiti) от Zep
-- Вдохновлено статьёй ["A Production-Ready API for Graphiti"](https://medium.com/@saeed.hajebi) от Saeed Hajebi
+- Вдохновлено статьёй ["A Production-Ready API for Graphiti"](https://medium.com/@saeedhajebi) от Saeed Hajebi
