@@ -5,3 +5,4 @@ pydantic-settings>=2.4.0
 python-dotenv
 httpx
 neo4j
+falkordb>=1.1.2

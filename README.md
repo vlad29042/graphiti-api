@@ -1,6 +1,6 @@
 # Graphiti API Service
 
-Production-ready HTTP API обёртка для [Graphiti](https://github.com/getzep/graphiti) - фреймворка для построения временных графов знаний для AI агентов.
+Production-ready HTTP API обёртка для [Graphiti](https://github.com/getzep/graphiti) - фреймворка для построения временных графов знаний для AI агентов. Использует [форк с поддержкой relevance score](https://github.com/vlad29042/graphiti).
 
 ## Автор
 
@@ -27,6 +27,19 @@ Graphiti мощный инструмент, но имеет конфликты e
 - ✅ **OpenAPI документация** - Автогенерируемая документация API на `/docs`
 - ✅ **Оценка релевантности** - Фильтрация результатов по score (требует форк Graphiti)
 
+## Почему FalkorDB по умолчанию?
+
+FalkorDB выбран как основная БД для этого проекта по следующим причинам:
+- **Производительность** - In-memory база данных, работает в 10+ раз быстрее Neo4j
+- **Легковесность** - Использует ~50MB RAM против 500MB+ у Neo4j  
+- **Простота** - Запускается как Redis, не требует сложной настройки
+- **Совместимость** - Полностью поддерживается Graphiti
+
+Neo4j остаётся доступным как альтернатива для тех, кому нужны:
+- Визуализация графа через Neo4j Browser
+- Enterprise функции
+- Большая экосистема инструментов
+
 ## Зачем Graphiti вместо векторной БД?
 
 В отличие от традиционных векторных БД, Graphiti предоставляет:
@@ -51,7 +64,7 @@ await graphiti.add_episode("Компания ДонКровляСтрой осн
 ### Требования
 
 - Docker и Docker Compose
-- Neo4j 5.26+ (включён в docker-compose)
+- FalkorDB (включён в docker-compose) или Neo4j 5.26+
 - OpenAI API ключ
 
 ### Установка
@@ -64,7 +77,17 @@ cd graphiti-api
 
 2. Создайте файл `.env`:
 ```env
-# Настройки Neo4j
+# Выбор базы данных
+DB_TYPE=falkordb  # или "neo4j"
+
+# Настройки FalkorDB (по умолчанию)
+FALKOR_HOST=falkordb
+FALKOR_PORT=6379
+FALKOR_USER=
+FALKOR_PASSWORD=
+FALKOR_DATABASE=graphiti
+
+# Настройки Neo4j (если используете вместо FalkorDB)
 NEO4J_URI=bolt://neo4j:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=ваш_надёжный_пароль
@@ -162,10 +185,10 @@ GET /health
 ## Архитектура
 
 ```
-┌─────────┐     HTTP      ┌─────────────┐     Bolt      ┌────────┐
-│  Клиент │ ─────────────▶│ Graphiti API│ ─────────────▶│ Neo4j  │
-└─────────┘               │   (FastAPI) │                └────────┘
-                          └─────────────┘
+┌─────────┐     HTTP      ┌─────────────┐     Redis/Bolt    ┌─────────────┐
+│  Клиент │ ─────────────▶│ Graphiti API│ ───────────────▶│ FalkorDB/   │
+└─────────┘               │   (FastAPI) │                  │   Neo4j     │
+                          └─────────────┘                  └─────────────┘
                                  │
                                  ▼
                           Использует graphiti-core
@@ -177,9 +200,15 @@ GET /health
 
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
+| `DB_TYPE` | Тип базы данных: "falkordb" или "neo4j" | `falkordb` |
+| `FALKOR_HOST` | Хост FalkorDB | `falkordb` |
+| `FALKOR_PORT` | Порт FalkorDB | `6379` |
+| `FALKOR_USER` | Имя пользователя FalkorDB | Пусто |
+| `FALKOR_PASSWORD` | Пароль FalkorDB | Пусто |
+| `FALKOR_DATABASE` | База данных FalkorDB | `graphiti` |
 | `NEO4J_URI` | URI подключения к Neo4j | `bolt://neo4j:7687` |
 | `NEO4J_USER` | Имя пользователя Neo4j | `neo4j` |
-| `NEO4J_PASSWORD` | Пароль Neo4j | Обязательно |
+| `NEO4J_PASSWORD` | Пароль Neo4j | Пусто |
 | `OPENAI_API_KEY` | API ключ OpenAI | Обязательно |
 | `DEFAULT_LLM_MODEL` | LLM модель для обработки | `gpt-4o-mini` |
 | `DEFAULT_EMBEDDING_MODEL` | Модель для эмбеддингов | `text-embedding-3-small` |
@@ -259,9 +288,9 @@ graphiti-api/
 - Мониторьте время ответа
 - Логируйте relevance_score для оптимизации
 
-### 4. Очистка устаревших данных
+### 4. Управление временными данными
 
-Периодически помечайте устаревшие факты как invalid_at.
+Graphiti автоматически помечает факты как устаревшие (invalid_at) при получении противоречащей информации. Для фактов с известным сроком действия (акции, временные правила) можно указывать дату окончания заранее.
 
 ## Развёртывание
 

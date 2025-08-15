@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 from graphiti_core import Graphiti
+from graphiti_core.driver.falkordb_driver import FalkorDriver
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from .config import settings
 from .graphiti_logic import (
     add_episode_logic,
@@ -23,15 +25,30 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage the Graphiti client lifecycle with the FastAPI app."""
-    logger.info("Application startup: Initializing Graphiti client...")
-    # Graphiti reads models from environment variables DEFAULT_LLM_MODEL and DEFAULT_EMBEDDING_MODEL
-    graphiti_client = Graphiti(
-        uri=settings.NEO4J_URI,
-        user=settings.NEO4J_USER,
-        password=settings.NEO4J_PASSWORD,
-    )
+    logger.info(f"Application startup: Initializing Graphiti client with {settings.DB_TYPE}...")
     
-    logger.info("✅ Graphiti client initialized successfully")
+    # Select appropriate driver based on DB_TYPE
+    if settings.DB_TYPE == "falkordb":
+        driver = FalkorDriver(
+            host=settings.FALKOR_HOST,
+            port=settings.FALKOR_PORT,
+            username=settings.FALKOR_USER,
+            password=settings.FALKOR_PASSWORD,
+            database=settings.FALKOR_DATABASE
+        )
+        logger.info("Using FalkorDB driver")
+    else:
+        driver = Neo4jDriver(
+            uri=settings.NEO4J_URI,
+            user=settings.NEO4J_USER,
+            password=settings.NEO4J_PASSWORD
+        )
+        logger.info("Using Neo4j driver")
+    
+    # Initialize Graphiti with selected driver
+    graphiti_client = Graphiti(graph_driver=driver)
+    
+    logger.info(f"✅ Graphiti client initialized successfully with {settings.DB_TYPE}")
     
     app.state.graphiti_client = graphiti_client
     yield
