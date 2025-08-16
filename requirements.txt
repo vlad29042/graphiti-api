@@ -4,3 +4,4 @@ pydantic-settings>=2.4.0
 python-dotenv
 httpx
 falkordb>=1.0.0
+git+https://github.com/vlad29042/graphiti.git@main
