@@ -87,6 +87,37 @@ def read_root():
 async def health_check():
     return {"status": "healthy", "service": "graphiti-api"}
 
+# Import n8n routes
+from .n8n_routes import process_n8n_messages, get_memory_for_n8n
+
+# n8n compatible endpoints
+@app.post("/messages")
+async def add_messages(request: Request, messages_data: dict):
+    """n8n compatible endpoint for adding messages"""
+    return await process_n8n_messages(request, messages_data)
+
+@app.post("/get-memory")
+async def get_memory(request: Request, memory_request: dict):
+    """n8n compatible endpoint for retrieving memory"""
+    return await get_memory_for_n8n(request, memory_request)
+
+# Alternative delete endpoint that works
+@app.post("/api/remove-episode")
+async def remove_episode_api(request: Request, data: dict):
+    """Alternative endpoint to delete episode"""
+    try:
+        episode_uuid = data.get("episode_uuid")
+        if not episode_uuid:
+            raise HTTPException(status_code=400, detail="episode_uuid is required")
+            
+        client = request.app.state.graphiti_client
+        await client.remove_episode(episode_uuid)
+        
+        return {"success": True, "message": f"Episode {episode_uuid} deleted successfully"}
+    except Exception as e:
+        logger.error(f"Failed to delete episode: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Import CRUD routes
 from .crud_routes import (
     delete_episode, 
@@ -127,8 +158,33 @@ async def get_facts_endpoint(request: Request, group_id: Optional[str] = None, l
     """Get all facts (edges) from the knowledge graph"""
     return await get_facts(request, group_id, limit)
 
-@app.get("/episodes/{episode_uuid}")
-async def get_episode_endpoint(request: Request, episode_uuid: str):
-    """Get a specific episode by UUID"""
-    from .crud_routes import get_episode
-    return await get_episode(request, episode_uuid)
+@app.get("/episodes/{group_id}")
+async def get_episodes_by_group(request: Request, group_id: str, last_n: int = Query(20)):
+    """Get episodes by group_id"""
+    try:
+        client = request.app.state.graphiti_client
+        episodes = await client.retrieve_episodes(
+            group_ids=[group_id],
+            last_n=last_n
+        )
+        
+        # Convert episodes to dict format
+        result = []
+        for episode in episodes:
+            result.append({
+                "uuid": episode.uuid,
+                "name": episode.name,
+                "group_id": episode.group_id,
+                "labels": getattr(episode, 'labels', []),
+                "created_at": str(episode.created_at),
+                "source": episode.source.value if hasattr(episode.source, 'value') else str(episode.source),
+                "source_description": episode.source_description,
+                "content": episode.content,
+                "valid_at": str(episode.valid_at),
+                "entity_edges": episode.entity_edges
+            })
+        
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get episodes: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
