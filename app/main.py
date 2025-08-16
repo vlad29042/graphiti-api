@@ -88,18 +88,20 @@ async def health_check():
     return {"status": "healthy", "service": "graphiti-api"}
 
 # Import n8n routes
-from .n8n_routes import process_n8n_messages, get_memory_for_n8n
+from .n8n_routes import add_messages_n8n, get_memory_n8n, N8nMessagesRequest, GetMemoryRequest
 
 # n8n compatible endpoints
 @app.post("/messages")
 async def add_messages(request: Request, messages_data: dict):
     """n8n compatible endpoint for adding messages"""
-    return await process_n8n_messages(request, messages_data)
+    messages_request = N8nMessagesRequest(**messages_data)
+    return await add_messages_n8n(request, messages_request)
 
 @app.post("/get-memory")
 async def get_memory(request: Request, memory_request: dict):
     """n8n compatible endpoint for retrieving memory"""
-    return await get_memory_for_n8n(request, memory_request)
+    memory_data = GetMemoryRequest(**memory_request)
+    return await get_memory_n8n(request, memory_data)
 
 # Alternative delete endpoint that works
 @app.post("/api/remove-episode")
@@ -163,8 +165,10 @@ async def get_episodes_by_group(request: Request, group_id: str, last_n: int = Q
     """Get episodes by group_id"""
     try:
         client = request.app.state.graphiti_client
+        from datetime import datetime, timezone
         episodes = await client.retrieve_episodes(
             group_ids=[group_id],
+            reference_time=datetime.now(timezone.utc),
             last_n=last_n
         )
         
