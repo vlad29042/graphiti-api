@@ -23,7 +23,7 @@ services:
       - GRAPH_DATABASE_PROVIDER=falkordb
       - FALKORDB_HOST=falkordb
       - FALKORDB_PORT=6379
-      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-graphiti123}
+      - FALKORDB_PASSWORD=  # ВАЖНО: Оставьте пустым! FalkorDB в Docker работает без пароля
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DEFAULT_LLM_MODEL=${DEFAULT_LLM_MODEL:-gpt-4o-mini}
       - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL:-text-embedding-3-small}

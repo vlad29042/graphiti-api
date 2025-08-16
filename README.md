@@ -40,6 +40,8 @@ Production-ready HTTP API обёртка для [Graphiti](https://github.com/ge
 - ✅ Правильная обработка свойств объектов FalkorDB через `.properties`
 - ✅ Добавлены новые endpoints для работы с эпизодами
 - ✅ Улучшена обработка векторного поиска с расчётом score
+- ✅ **ВАЖНО**: Исправлена проблема с паролем FalkorDB - в docker-compose убран пароль из настроек graphiti сервиса
+- ✅ Исправлен метод `retrieve_episodes` - добавлен обязательный параметр `reference_time`
 
 ### 3. Новые возможности
 - **CRUD операции для эпизодов**: создание, чтение, обновление, удаление
@@ -105,6 +107,8 @@ docker-compose up -d
 API будет доступен по адресу `http://localhost:8000`
 
 ## API Endpoints
+
+Полная документация доступна на `/docs` (Swagger UI) после запуска сервиса.
 
 ### Основные endpoints
 
@@ -186,6 +190,56 @@ POST /get-memory
       "relevance_score": 0.85
     }
   ]
+}
+```
+
+### CRUD операции
+
+#### Удаление эпизода (DELETE)
+```bash
+DELETE /episodes
+{
+  "episode_uuid": "uuid-эпизода-для-удаления"
+}
+```
+
+#### Альтернативное удаление эпизода (POST)
+```bash
+POST /api/remove-episode
+{
+  "episode_uuid": "uuid-эпизода-для-удаления"
+}
+```
+
+#### Получение эпизодов по группе
+```bash
+GET /episodes/{group_id}?last_n=20
+```
+
+#### Получение всех узлов (entities)
+```bash
+GET /nodes?group_id=project_123&limit=100
+```
+
+#### Получение всех фактов (edges)
+```bash
+GET /facts?group_id=project_123&limit=100
+```
+
+#### Удаление факта
+```bash
+DELETE /facts
+{
+  "fact_uuid": "uuid-факта-для-удаления"
+}
+```
+
+#### Обновление факта
+```bash
+PUT /facts
+{
+  "fact_uuid": "uuid-факта",
+  "new_fact": "Обновленная информация"
 }
 ```
 
@@ -297,15 +351,19 @@ graphiti-api/
 
 1. **Ошибка подключения к FalkorDB**
    - Проверьте что FalkorDB запущен: `docker-compose ps`
-   - Проверьте пароль в `.env`
+   - **ВАЖНО**: В настройках graphiti в docker-compose уберите пароль: `FALKORDB_PASSWORD=` (пустое значение)
    - Проверьте логи: `docker-compose logs falkordb`
 
-2. **Низкие score при поиске**
+2. **Ошибка `retrieve_episodes() missing 1 required positional argument: 'reference_time'`**
+   - Метод `retrieve_episodes` требует обязательный параметр `reference_time`
+   - Исправлено в последней версии - автоматически используется текущее время
+
+3. **Низкие score при поиске**
    - Проверьте качество embedding модели
    - Убедитесь что контент достаточно семантически богат
    - Попробуйте другую модель эмбеддингов
 
-3. **Ошибка 'score' not defined**
+4. **Ошибка 'score' not defined**
    - Убедитесь что используется правильная версия graphiti-core
    - Проверьте что не используются старые Neo4j запросы
 

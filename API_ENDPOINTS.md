@@ -1,6 +1,7 @@
-# Graphiti API Endpoints
+# Полный список API Endpoints
 
-База: `http://localhost:8000`
+База: `http://localhost:8000`  
+Документация Swagger UI: `http://localhost:8000/docs`
 
 ## Основные операции
 
@@ -84,8 +85,7 @@ GET /facts?group_id=project-123&limit=100
 Удалить эпизод (использует graphiti-core remove_episode)
 ```json
 {
-  "episode_uuid": "uuid-123",
-  "group_id": "project-123"
+  "episode_uuid": "uuid-123"
 }
 ```
 Удаляет эпизод и все связанные с ним узлы/рёбра, которые больше нигде не используются.
@@ -94,8 +94,7 @@ GET /facts?group_id=project-123&limit=100
 Удалить факт (инвалидация или физическое удаление)
 ```json
 {
-  "fact_uuid": "uuid-456",
-  "group_id": "project-123"
+  "fact_uuid": "uuid-456"
 }
 ```
 По умолчанию выполняет временную инвалидацию (устанавливает invalid_at). Если не удаётся - физически удаляет.
@@ -105,21 +104,46 @@ GET /facts?group_id=project-123&limit=100
 ```json
 {
   "fact_uuid": "uuid-456",
-  "new_fact": "Updated fact text",
-  "group_id": "project-123"
+  "new_fact": "Updated fact text"
 }
 ```
 Сохраняет историю изменений: старый факт помечается как недействительный, создаётся новый.
 
+### 12. POST /api/remove-episode ✅
+Альтернативный endpoint для удаления эпизода (для совместимости)
+```json
+{
+  "episode_uuid": "uuid-123"
+}
+```
+Выполняет ту же функцию что и DELETE /episodes
+
 ## Служебные
 
-### 12. GET /
+### 13. POST /search_with_score
+Поиск с отображением внутреннего score (для отладки)
+```json
+{
+  "query": "project timeline",
+  "group_ids": ["project-123"],
+  "limit": 10
+}
+```
+Возвращает результаты с полями score для анализа релевантности
+
+### 14. GET /
 Главная страница
+```json
+{"message": "Graphiti API Service is running."}
+```
 
-### 13. GET /health
+### 15. GET /health
 Проверка состояния
+```json
+{"status": "healthy", "service": "graphiti-api"}
+```
 
-## Итого: 13 endpoints
+## Итого: 15 endpoints
 
 ### Все endpoints реализованы! ✅
 
@@ -138,3 +162,5 @@ GET /facts?group_id=project-123&limit=100
 1. **Temporal Knowledge Graph** - данные имеют временные метки (valid_at, invalid_at)
 2. **Версионирование** - при обновлении фактов старые версии сохраняются с пометкой invalid_at
 3. **Каскадное удаление** - при удалении эпизода удаляются только уникальные для него узлы/рёбра
+4. **Векторный поиск** - использует FalkorDB для косинусного сходства, score = (2 - cosineDistance) / 2
+5. **Без аутентификации** - В текущей версии все endpoints открыты (добавьте auth для production)
