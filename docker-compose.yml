@@ -1,57 +1,43 @@
+version: '3.8'
+
 services:
-  neo4j:
-    image: neo4j:5.26.0
-    container_name: graphiti_neo4j
-    environment:
-      - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
-      - NEO4J_PLUGINS=["apoc"]
-      - NEO4J_apoc_export_file_enabled=true
-      - NEO4J_apoc_import_file_enabled=true
-      - NEO4J_apoc_import_file_use__neo4j__config=true
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: graphiti-falkordb
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "6379:6379"
+    environment:
+      - REDIS_ARGS=--requirepass ${FALKORDB_PASSWORD:-graphiti123}
     volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
+      - falkordb_data:/data
     healthcheck:
-      test: ["CMD", "neo4j", "status"]
+      test: ["CMD", "redis-cli", "-a", "${FALKORDB_PASSWORD:-graphiti123}", "ping"]
       interval: 10s
-      timeout: 10s
+      timeout: 5s
       retries: 5
-      start_period: 30s
-    networks:
-      - graphiti_network
 
   graphiti-api:
-    build: .
-    container_name: graphiti_api
+    build: ./graphiti-api
+    container_name: graphiti-api
     environment:
-      - NEO4J_URI=${NEO4J_URI}
-      - NEO4J_USER=${NEO4J_USER}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - GRAPH_DATABASE_PROVIDER=falkordb
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-graphiti123}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - DEFAULT_LLM_MODEL=${DEFAULT_LLM_MODEL}
-      - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL}
+      - DEFAULT_LLM_MODEL=${DEFAULT_LLM_MODEL:-gpt-4o-mini}
+      - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL:-text-embedding-3-small}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1536}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-openai}
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
-      neo4j:
+      falkordb:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    restart: unless-stopped
-    networks:
-      - graphiti_network
+    volumes:
+      - ./graphiti-api:/app
+      - ./graphiti-fork:/graphiti-fork
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:
-  neo4j_data:
-  neo4j_logs:
-
-networks:
-  graphiti_network:
-    driver: bridge
+  falkordb_data:

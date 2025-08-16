@@ -19,6 +19,7 @@ class EpisodeRequest(BaseModel):
 
 class EpisodeResponse(BaseModel):
     status: str
+    episode_id: Optional[str] = None
 
 class SearchRequest(BaseModel):
     query: str
@@ -45,7 +46,7 @@ class SearchResponse(BaseModel):
 
 async def add_episode_logic(client: Graphiti, episode_data: EpisodeRequest) -> EpisodeResponse:
     """Logic to add an episode to the knowledge graph."""
-    await client.add_episode(
+    episode = await client.add_episode(
         name=episode_data.name,
         episode_body=episode_data.content,
         source_description=episode_data.source_description,
@@ -53,7 +54,9 @@ async def add_episode_logic(client: Graphiti, episode_data: EpisodeRequest) -> E
         reference_time=datetime.now(timezone.utc),
         group_id=episode_data.group_id,
     )
-    return EpisodeResponse(status="success")
+    # episode is AddEpisodeResults which contains: episode, nodes, edges
+    episode_uuid = episode.episode.uuid if hasattr(episode, 'episode') else None
+    return EpisodeResponse(status="success", episode_id=episode_uuid)
 
 async def search_logic(client: Graphiti, search_data: SearchRequest) -> SearchResponse:
     """Logic to search the knowledge graph."""

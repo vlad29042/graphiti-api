@@ -1,6 +1,6 @@
 # Graphiti API Service
 
-Production-ready HTTP API обёртка для [Graphiti](https://github.com/getzep/graphiti) - фреймворка для построения временных графов знаний для AI агентов. Использует [форк с поддержкой relevance score](https://github.com/vlad29042/graphiti).
+Production-ready HTTP API обёртка для [Graphiti](https://github.com/getzep/graphiti) - фреймворка для построения временных графов знаний для AI агентов.
 
 ## Автор
 
@@ -27,19 +27,6 @@ Graphiti мощный инструмент, но имеет конфликты e
 - ✅ **OpenAPI документация** - Автогенерируемая документация API на `/docs`
 - ✅ **Оценка релевантности** - Фильтрация результатов по score (требует форк Graphiti)
 
-## Почему FalkorDB по умолчанию?
-
-FalkorDB выбран как основная БД для этого проекта по следующим причинам:
-- **Производительность** - In-memory база данных, работает в 10+ раз быстрее Neo4j
-- **Легковесность** - Использует ~50MB RAM против 500MB+ у Neo4j  
-- **Простота** - Запускается как Redis, не требует сложной настройки
-- **Совместимость** - Полностью поддерживается Graphiti
-
-Neo4j остаётся доступным как альтернатива для тех, кому нужны:
-- Визуализация графа через Neo4j Browser
-- Enterprise функции
-- Большая экосистема инструментов
-
 ## Зачем Graphiti вместо векторной БД?
 
 В отличие от традиционных векторных БД, Graphiti предоставляет:
@@ -64,7 +51,7 @@ await graphiti.add_episode("Компания ДонКровляСтрой осн
 ### Требования
 
 - Docker и Docker Compose
-- FalkorDB (включён в docker-compose) или Neo4j 5.26+
+- Neo4j 5.26+ (включён в docker-compose)
 - OpenAI API ключ
 
 ### Установка
@@ -77,17 +64,7 @@ cd graphiti-api
 
 2. Создайте файл `.env`:
 ```env
-# Выбор базы данных
-DB_TYPE=falkordb  # или "neo4j"
-
-# Настройки FalkorDB (по умолчанию)
-FALKOR_HOST=falkordb
-FALKOR_PORT=6379
-FALKOR_USER=
-FALKOR_PASSWORD=
-FALKOR_DATABASE=graphiti
-
-# Настройки Neo4j (если используете вместо FalkorDB)
+# Настройки Neo4j
 NEO4J_URI=bolt://neo4j:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=ваш_надёжный_пароль
@@ -109,9 +86,36 @@ API будет доступен по адресу `http://localhost:8000`
 
 ## API Endpoints
 
-### FlowHubN8N совместимый endpoint
+### Основные endpoints
 
-#### Получение памяти с оценкой релевантности
+#### Добавление сообщений
+```bash
+POST /messages
+{
+  "group_id": "project_123",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tesla была основана в 2003 году Илоном Маском"
+    }
+  ]
+}
+```
+
+#### Поиск
+```bash
+POST /search
+{
+  "query": "Расскажи про Tesla",
+  "group_ids": ["project_123"],
+  "search_type": "hybrid",
+  "limit": 10
+}
+```
+
+### n8n Endpoints
+
+#### Получение памяти (n8n совместимый)
 ```bash
 POST /get-memory
 {
@@ -148,47 +152,87 @@ POST /get-memory
 GET /health
 ```
 
-## Обработка промптов и FAQ через FlowHubN8N
+## Интеграция с n8n
 
-### Подготовка промптов для загрузки
+### Пример workflow для добавления знаний
 
-Промпты и FAQ обрабатываются одинаково через поэтапный подход:
+```json
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-knowledge",
+        "responseMode": "onReceived"
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://graphiti-api:8000/messages",
+        "bodyParametersJson": {
+          "group_id": "{{ $json.group_id }}",
+          "messages": "{{ $json.messages }}"
+        }
+      },
+      "name": "Add to Graphiti",
+      "type": "n8n-nodes-base.httpRequest"
+    }
+  ]
+}
+```
 
-1. **Разбивка на секции** - Делим большой текст на логические части по заголовкам, пустым строкам или маркерам. Каждая секция должна быть не больше 1000-2000 токенов для эффективной обработки.
+### Пример workflow для AI с контекстом
 
-2. **Классификация контента** - Определяем тип каждой секции: инструкция, пример, правило, ограничение. Это поможет потом находить нужные части промпта по контексту.
-
-3. **Обогащение метаданными** - Для каждой секции добавляем ключевые слова, тему, связанные концепции. Например, секция про возвраты билетов получит теги: "возврат", "отмена", "штраф", "сроки".
-
-4. **Загрузка в Graphiti** - Каждая обработанная секция загружается отдельно через endpoint `/messages` с указанием `group_id` (например, "prompts" или "faq").
-
-### Обработка FAQ для лучшего поиска
-
-Для FAQ дополнительно генерируем альтернативные формулировки вопросов. Если есть вопрос "Как оформить возврат билета?", создаём варианты: "Можно ли вернуть билет?", "Как сдать билет обратно?", "Процедура возврата авиабилета". Все варианты загружаются в граф, что позволяет находить FAQ даже если клиент спрашивает другими словами.
-
-### Практический workflow в n8n
-
-1. **Trigger** - Получаем документ с промптами или FAQ
-2. **Split In Batches** - Разбиваем на части по 10-20 секций
-3. **OpenAI Node** - Обрабатываем каждый батч: извлекаем структуру, генерируем метаданные
-4. **HTTP Request** - Отправляем каждую обработанную секцию в Graphiti API
-5. **Wait Node** - Пауза между батчами чтобы не перегружать систему
-
-### Результат
-
-После обработки ваш AI сможет:
-- Находить только релевантные части промпта вместо загрузки всего документа
-- Отвечать на вопросы FAQ даже если они заданы нестандартно
-- Автоматически использовать правильные инструкции в зависимости от контекста
-- Показывать relevance_score для каждого найденного факта
+```json
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://graphiti-api:8000/get-memory",
+        "bodyParametersJson": {
+          "group_id": "{{ $json.group_id }}",
+          "messages": [{"role": "user", "content": "{{ $json.query }}"}],
+          "max_facts": 10,
+          "min_score": 0.7
+        }
+      },
+      "name": "Get Context",
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Используй следующие факты: {{ $json.facts }}"
+            },
+            {
+              "role": "user", 
+              "content": "{{ $json.query }}"
+            }
+          ]
+        }
+      },
+      "name": "OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi"
+    }
+  ]
+}
+```
 
 ## Архитектура
 
 ```
-┌─────────┐     HTTP      ┌─────────────┐     Redis/Bolt    ┌─────────────┐
-│  Клиент │ ─────────────▶│ Graphiti API│ ───────────────▶│ FalkorDB/   │
-└─────────┘               │   (FastAPI) │                  │   Neo4j     │
-                          └─────────────┘                  └─────────────┘
+┌─────────┐     HTTP      ┌─────────────┐     Bolt      ┌────────┐
+│  Клиент │ ─────────────▶│ Graphiti API│ ─────────────▶│ Neo4j  │
+└─────────┘               │   (FastAPI) │                └────────┘
+                          └─────────────┘
                                  │
                                  ▼
                           Использует graphiti-core
@@ -200,15 +244,9 @@ GET /health
 
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
-| `DB_TYPE` | Тип базы данных: "falkordb" или "neo4j" | `falkordb` |
-| `FALKOR_HOST` | Хост FalkorDB | `falkordb` |
-| `FALKOR_PORT` | Порт FalkorDB | `6379` |
-| `FALKOR_USER` | Имя пользователя FalkorDB | Пусто |
-| `FALKOR_PASSWORD` | Пароль FalkorDB | Пусто |
-| `FALKOR_DATABASE` | База данных FalkorDB | `graphiti` |
 | `NEO4J_URI` | URI подключения к Neo4j | `bolt://neo4j:7687` |
 | `NEO4J_USER` | Имя пользователя Neo4j | `neo4j` |
-| `NEO4J_PASSWORD` | Пароль Neo4j | Пусто |
+| `NEO4J_PASSWORD` | Пароль Neo4j | Обязательно |
 | `OPENAI_API_KEY` | API ключ OpenAI | Обязательно |
 | `DEFAULT_LLM_MODEL` | LLM модель для обработки | `gpt-4o-mini` |
 | `DEFAULT_EMBEDDING_MODEL` | Модель для эмбеддингов | `text-embedding-3-small` |
@@ -288,9 +326,9 @@ graphiti-api/
 - Мониторьте время ответа
 - Логируйте relevance_score для оптимизации
 
-### 4. Управление временными данными
+### 4. Очистка устаревших данных
 
-Graphiti автоматически помечает факты как устаревшие (invalid_at) при получении противоречащей информации. Для фактов с известным сроком действия (акции, временные правила) можно указывать дату окончания заранее.
+Периодически помечайте устаревшие факты как invalid_at.
 
 ## Развёртывание
 
