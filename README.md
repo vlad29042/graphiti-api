@@ -249,38 +249,6 @@ score = (2 - vec.cosineDistance(embedding1, embedding2)) / 2
 python tests/test_full_cycle.py
 ```
 
-## Интеграция с n8n
-
-### Пример workflow для добавления знаний
-
-```json
-{
-  "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "webhook-knowledge",
-        "responseMode": "onReceived"
-      },
-      "name": "Webhook",
-      "type": "n8n-nodes-base.webhook"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://graphiti-api:8000/messages",
-        "bodyParametersJson": {
-          "group_id": "{{ $json.group_id }}",
-          "messages": "{{ $json.messages }}"
-        }
-      },
-      "name": "Add to Graphiti",
-      "type": "n8n-nodes-base.httpRequest"
-    }
-  ]
-}
-```
-
 ## Разработка
 
 ### Структура проекта
@@ -340,15 +308,6 @@ graphiti-api/
 3. **Ошибка 'score' not defined**
    - Убедитесь что используется правильная версия graphiti-core
    - Проверьте что не используются старые Neo4j запросы
-
-## Миграция с Neo4j
-
-Если вы мигрируете с Neo4j версии:
-
-1. Экспортируйте данные из Neo4j
-2. Обновите конфигурацию на FalkorDB
-3. Импортируйте данные через API
-4. Проверьте работу векторного поиска
 
 ## Благодарности
 
