@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  falkordb:
+    image: falkordb/falkordb:v4.2.2
+    container_name: graphiti-falkordb
+    ports:
+      - "6379:6379"
+    environment:
+      # FalkorDB runs without password by default
+      FALKORDB_PASSWORD: ""
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  graphiti-api:
+    build: .
+    container_name: graphiti-api
+    environment:
+      - GRAPH_DATABASE_PROVIDER=falkordb
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - FALKORDB_PASSWORD=  # ВАЖНО: Оставьте пустым! FalkorDB в Docker работает без пароля
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEFAULT_LLM_MODEL=${DEFAULT_LLM_MODEL:-gpt-4o-mini}
+      - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL:-text-embedding-3-small}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1536}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-openai}
+    ports:
+      - "8000:8000"
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./requirements.txt:/app/requirements.txt
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  falkordb_data:
